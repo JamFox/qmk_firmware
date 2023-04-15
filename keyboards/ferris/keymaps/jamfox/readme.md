@@ -4,58 +4,59 @@
 * Hardware Supported: [Sweep](https://github.com/davidphilipbarr/Sweep) (all versions)
 * Hardware Availability: Print the PCB with gerber files from the repository
 
-Make example for this keyboard (after setting up your build environment):
+## Sea-Picro RP2040 Controller
 
-    make ferris/sweep:default
+- [Sea-Picro](https://joshajohnson.com/sea-picro/)
+- [QMK Raspberry Pi RP2040 Dev](https://docs.qmk.fm/#/platformdev_rp2040)
 
-See the [build environment setup](https://docs.qmk.fm/#/getting_started_build_tools) and the [make instructions](https://docs.qmk.fm/#/getting_started_make_guide) for more information. Brand new to QMK? Start with our [Complete Newbs Guide](https://docs.qmk.fm/#/newbs).
+Sea-Picro can work with most existing Pro-Micro compatible keyboards on the market, you just need to recompile the firmware to suit Sea-Picro first. You cannot use an existing `.hex` file.
 
-## Setting Handedness
+Pro Micro RP2040 controllers are supported with [QMK Converters](https://docs.qmk.fm/#/feature_converters). As Sea-Picro has the same pinout as the RP2040 Pro Micro, we can use the `promicro_rp2040` converter to remap the pins:
 
-Firmware uses [handedness by EEPROM](https://docs.qmk.fm/#/feature_split_keyboard?id=handedness-by-eeprom) as default and it must be *configured once* on each side. The make commands for Pro micros are:
-
-    make ferris/sweep:default:avrdude-split-left
-    make ferris/sweep:default:avrdude-split-right
-
-For Elite-C or compatible controllers using `DFU` bootloader, add the line `BOOTLOADER = atmel-dfu` into the user keymap `rules.mk` file and use the following make commands:
-
-    make ferris/sweep:default:dfu-split-left
-    make ferris/sweep:default:dfu-split-right
-
-[QMK Toolbox](http://qmk.fm/toolbox) can also be used to set EEPROM handedness. Place the controller in bootloader mode and select menu option Tools -> EEPROM -> Set Left/Right Hand
-
-### RP2040 Controllers
-
-Pro Micro RP2040 controllers are supported with [QMK Converters](https://docs.qmk.fm/#/feature_converters). The make command example with handedness setting for Adafruit's KB2040 are:
-
-    make CONVERT_TO=kb2040 ferris/sweep:default:uf2-split-left
-    make CONVERT_TO=kb2040 ferris/sweep:default:uf2-split-right
-
-## Bootloader
-
-Enter the bootloader in 3 ways:
-
-* **Bootmagic reset**: Hold down the top left key on the left half (or the top right key on the right half) and plug in the controller on that side.
-* **Physical reset button**: Briefly press the reset button soldered on the PCB.
-* **Keycode in layout**: Press the key mapped to `QK_BOOT` if it is configured.
-
-## Swapped Pins
-
-If you printed one of the PCB variant with swapped letters `Q` and `B` / `P` and `N`, add the following code to your keymap's `config.h` to swap pins `E6` and `D7` in the firmware:
-```c
-#undef DIRECT_PINS
-#define DIRECT_PINS { \
-    { D7, F7, F6, F5, F4 }, \
-    { B1, B3, B2, B6, D3 }, \
-    { D1, D0, D4, C6, E6 }, \
-    { B4, B5, NO_PIN, NO_PIN, NO_PIN } \
-}
-#undef DIRECT_PINS_RIGHT
-#define DIRECT_PINS_RIGHT { \
-    { F4, F5, F6, F7, D7 }, \
-    { D3, B6, B2, B3, B1 }, \
-    { E6, C6, D4, D0, D1 }, \
-    { B5, B4, NO_PIN, NO_PIN, NO_PIN } \
-}
+```bash
+qmk flash -c -kb chalice -km default -e CONVERT_TO=promicro_rp2040
 ```
 
+Setting handedness:
+
+```bash
+make CONVERT_TO=promicro_rp2040 ferris/sweep:default:uf2-split-left
+make CONVERT_TO=promicro_rp2040 ferris/sweep:default:uf2-split-right
+```
+
+Change `MCU` to `RP2040` and `BOOTLOADER` to `rp2040` in `rules.mk`.
+
+Update `MATRIX_ROW_PINS` and `MATRIX_COL_PINS` in `config.h` - Search pro micro and the Sparkfun RP2040, get pinouts for both, and rename the pins one by one, so like F6, B3, B2 becomes GP27, GP20, GP23 - when you look at the pinouts this should make more sense.
+
+There's a compile command to convert to a Sea Picro and get a .UF2 file. I was able to successfully compile a .UF2 file using QMK MSYS, with the command:
+
+`qmk compile -kb ferris/sweep -km via -e CONVERT_TO=promicro_rp2040`
+
+Then you would just need to flash that .UF2 file once, and assuming Via still supports the keyboard after the conversion, you would then be able to change the layout of your keyboard straight from an internet browser on any computer. I've never actually used Via, so my understanding may be incorrect, but it seems fairly straightforward.
+
+Ferris Sweep uses EEPROM to set which side each half of the board is. EEPROM data is not part of a compiled firmware file. QMK Toolbox apparently has an option to set the handedness in EEPROM when flashing, but we were getting errors, so chose to switch to hardcoded handedness instead since OP always plugs his USB into the same side.
+
+In `config.h`, change `#define EE_HANDS` to `#define MASTER_LEFT` or `MASTER_RIGHT`. This will require you to always plug USB into the left or right side, respectively, otherwise your layout will be flipped. Save the file and compile with the above command, then flash that to both sides normally.
+
+## Reset / Bootloader Control
+
+Due to how the RP2040 microcontroller on Sea-Picro functions, the reset button behaves differently to traditional Pro Micro based controllers.
+
+- Tapping the reset button for < 500ms will cause the board to reset and your code to start running again.
+- Holding the reset button for > 1 second will cause the board to go into bootloader mode and allow you to flash new code.
+
+QMK has added a "double tap for bootloader" feature for RP2040 boards, however due to the implementation on Sea-Picro this may not work and it’s suggested to hold the reset button to get into bootloader mode.
+
+## Compiling / Flashing
+
+Compile:
+
+1. Change `MCU` to `RP2040` and `BOOTLOADER` to `rp2040` in `rules.mk`.
+2. Compile using the `CONVERT_TO=promicro_rp2040` [converter](https://docs.qmk.fm/#/feature_converters).
+
+Flash:
+
+1. Compile your code as outlined above.
+2. Place the board into bootloader by holding the `RESET` button or using the `QK_BOOT` keycode.
+3. Once a drive called `RPI-RP2` is detected, drag the `.uf2` file generated by QMK onto the drive.
+4. The `RPI-RP2` drive will disappear and a few seconds later your keyboard will be ready for use.
